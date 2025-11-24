@@ -1,0 +1,9 @@
+{
+  "name": "vidshifu-frontend",
+  "version": "1.0.0",
+  "description": "Frontend to call VidShifu AI Backend",
+  "scripts": {
+    "start": "netlify dev",
+    "build": "echo 'Build successful'"
+  }
+}

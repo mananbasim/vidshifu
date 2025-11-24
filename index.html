@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidShifu Frontend Tester</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f4f9; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        button { padding: 10px 20px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        #status { margin-top: 20px; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: #e9ecef; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🎥 VidShifu AI Video Generator</h2>
+        <p>Aapka backend URL: <strong>https://MananBasimPK-VidShifu.hf.space</strong></p>
+        <button id="startButton">Start Full Video Generation</button>
+        <div id="status">Ready to start...</div>
+        <div id="finalVideoLink" style="margin-top: 20px;"></div>
+    </div>
+
+    <script>
+        // -- 1. CONFIGURATION --
+        // WARNING: SECURITY RISK - ONLY FOR TESTING.
+        // As you are using the free Netlify tier, we put the key here for deployment.
+        const BACKEND_URL = "https://MananBasimPK-VidShifu.hf.space";
+        const API_TOKEN = "YOUR_SECURE_DEFAULT_TOKEN_HERE"; // <--- ZAROOR CHANGE KAREIN!
+
+        const HEADERS = {
+            'Content-Type': 'application/json',
+            'x-token': API_TOKEN
+        };
+
+        // LLM se aane wala sample data
+        const SCRIPT_SCENES = [
+            { prompt: "Boy and girl arguing gently, close up.", boy_text: "Bus aa gayi.", girl_text: "Chalo jaldi." },
+            { prompt: "Wide shot of the bus interior, they sit looking out at the rain.", boy_text: "Barish tez ho gayi hai.", girl_text: "Achha hai time par nikal gaye." }
+        ];
+
+        const statusDiv = document.getElementById('status');
+        const startButton = document.getElementById('startButton');
+
+        function updateStatus(message) {
+            statusDiv.innerHTML += `\n> ${message}`;
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+        }
+
+        // --- 2. MAIN FUNCTION: THE CONTINUITY LOOP ---
+
+        async function generateFullVideoSequence() {
+            startButton.disabled = true;
+            statusDiv.innerHTML = "Process started. Please wait (this can take several minutes)...";
+
+            let tempVideoFiles = [];
+            
+            try {
+                for (let i = 0; i < SCRIPT_SCENES.length; i++) {
+                    const scene = SCRIPT_SCENES[i];
+                    updateStatus(`--- Scene ${i + 1} ki creation shuru: ${scene.prompt} ---`);
+
+                    // A. SCENE CREATION API CALL
+                    const createPayload = {
+                        visual_prompt: scene.prompt,
+                        dialogue_boy: scene.boy_text,
+                        dialogue_girl: scene.girl_text,
+                        output_format: "shorts",
+                    };
+
+                    const createResponse = await axios.post(`${BACKEND_URL}/scene/create_single`, createPayload, { headers: HEADERS });
+                    const currentVideoFilename = createResponse.data.video_filename;
+                    tempVideoFiles.push(currentVideoFilename);
+                    
+                    updateStatus(`✅ Scene ${i + 1} generated: ${currentVideoFilename}`);
+
+                    // B. LAST FRAME EXTRACTION API CALL (Continuity ke liye)
+                    // Server is video ka aakhri frame nikal kar use 'placeholder_start_frame.png' se replace kar dega.
+                    const framePayload = { video_filename: currentVideoFilename };
+                    await axios.post(`${BACKEND_URL}/utility/get_last_frame`, framePayload, { headers: HEADERS });
+                    
+                    updateStatus("Continuity frame updated for the next scene.");
+                }
+
+                // C. CONCATENATE ALL VIDEOS INTO ONE FINAL MOVIE
+                updateStatus("--- 🎬 Final Video Clips ko jor rahe hain... ---");
+
+                const concatPayload = { video_filenames: tempVideoFiles };
+                const concatResponse = await axios.post(`${BACKEND_URL}/scene/concatenate`, concatPayload, { headers: HEADERS });
+
+                const finalVideoFile = concatResponse.data.final_video_filename;
+                const finalVideoURL = `${BACKEND_URL}/resolve/main/${finalVideoFile}`; // Hugging Face file URL format
+
+                updateStatus(`\n\n✅ FINAL MOVIE READY: ${finalVideoURL}`);
+
+                document.getElementById('finalVideoLink').innerHTML = `
+                    <a href="${finalVideoURL}" target="_blank" style="color: green; font-weight: bold;">Download Final Video (${finalVideoFile})</a>
+                `;
+
+            } catch (error) {
+                console.error("Sequence Failed:", error);
+                const errorMessage = error.response ? error.response.data.detail : error.message;
+                updateStatus(`🛑 ERROR FAILED: ${errorMessage}. Check Hugging Face Logs.`);
+            } finally {
+                startButton.disabled = false;
+            }
+        }
+
+        startButton.addEventListener('click', generateFullVideoSequence);
+    </script>
+</body>
+</html>
